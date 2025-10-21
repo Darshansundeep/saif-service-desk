@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: service-tickets-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: service_tickets
+      POSTGRES_USER: ticket_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticket_admin -d service_tickets"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: service-tickets-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://ticket_admin:${DB_PASSWORD:-dev123}@postgres:5432/service_tickets
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - MAX_FILE_SIZE=10485760
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads:
+    driver: local
